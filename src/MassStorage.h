@@ -22,9 +22,10 @@
 #include <stdint.h>
 #include "usb_ch9.h"
 #include "Usb.h"
-#include "Arduino.h"
+#include <Arduino.h>
 #include "SCSI.h"
 #include "confdescparser.h"
+#define Serial Serial3
 
 // Requests type
 #define bmREQ_MS_IN     USB_SETUP_DEVICE_TO_HOST|USB_SETUP_TYPE_CLASS|USB_SETUP_RECIPIENT_INTERFACE

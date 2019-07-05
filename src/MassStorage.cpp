@@ -94,7 +94,7 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
 
     AddressPool &addrPool = pUsb->GetAddressPool();
 
-    TRACE_USBHOST(printf("MassStorage::Init\r\n");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MassStorage::Init\r\n");)
     if (bAddress)
         return USB_ERROR_CLASS_INSTANCE_ALREADY_IN_USE;
 
@@ -106,7 +106,7 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
 
     if (!p->epinfo)
     {
-        TRACE_USBHOST(printf("MS::Init : epinfo is null!\r\n");)
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::Init : epinfo is null!\r\n");)
         return USB_ERROR_EPINFO_IS_NULL;
     }
     // Save old pointer to EP_RECORD of address 0
@@ -148,10 +148,12 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
         p->lowspeed = false;
         addrPool.FreeAddress(bAddress);
         bAddress = 0;
-        TRACE_USBHOST(printf("MassStorage::Init : setAddr failed with rcode %lu\r\n", rcode);)
+        TRACE_USBHOST_SERIAL3(Serial.println("MassStorage::Init : setAddr failed with rcode \r\n");)
+        TRACE_USBHOST_SERIAL3(Serial.println(rcode);)
         return rcode;
     }
-    TRACE_USBHOST(printf("MassStorage::Init : device address is now %lu\r\n", bAddress);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MassStorage::Init : device address is now");)
+    TRACE_USBHOST_SERIAL3(Serial.println(bAddress);)
     p->lowspeed = false;
 
     p = addrPool.GetUsbDevicePtr(bAddress);
@@ -167,7 +169,8 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
         goto FailGetDevDescr;
 
     num_of_conf = ((USB_DEVICE_DESCRIPTOR*)buf)->bNumConfigurations;
-    TRACE_USBHOST(printf("MassStorage::Init : number of configuration is %lu\r\n", num_of_conf);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MassStorage::Init : number of configuration is \r\n");)
+    TRACE_USBHOST_SERIAL3(Serial.println(num_of_conf);)
 
     // Assign epInfo to epinfo pointer
     // its going to assign usbdevice the ep info entry with num of endpoints to
@@ -180,6 +183,7 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
                          UHS_STOR_PROTO_BBB, // bulk only transport
                          0> confDescrParser(this);
 
+        // this code figures out the bNumEP
         rcode = pUsb->getConfDescr(bAddress, 0, i, &confDescrParser);
 
         if (rcode)
@@ -187,17 +191,15 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
             goto FailGetConfDescr;
         }
 
-        if (bNumEP > 1)
-            break;
     }
     if (bNumEP < 2)
         return USB_DEV_CONFIG_ERROR_DEVICE_NOT_SUPPORTED;
-
     // Assign epInfo to epinfo pointer - this time all 3 endpoins
     rcode = pUsb->setEpInfoEntry(bAddress, bNumEP, epInfo);
     if (rcode)
         goto FailSetDevTblEntry;
-    TRACE_USBHOST(printf("MS::Init : bConfNum: %lu\r\n", bConfNum);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Init : bConfNum");)
+    TRACE_USBHOST_SERIAL3(Serial.println(bConfNum);)
 
     // Set Configuration Value
     // determines which configuration to set
@@ -206,30 +208,36 @@ uint32_t MassStorage::Init(uint32_t parent, uint32_t port, uint32_t lowspeed)
     if (rcode)
         goto FailSetConfDescr;
 
-    TRACE_USBHOST(printf("MS::Init : bIfaceNum: %lu\r\n", bIfaceNum);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Init : bIfaceNum");)
+    TRACE_USBHOST_SERIAL3(Serial.println(bIfaceNum);)
 
-    TRACE_USBHOST(printf("MassStorage::Init: device configured successfully\r\n");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MassStorage::Init: device configured successfully\r\n");)
     bPollEnable = true;
+    GetMaxLUN(&bMaxLUN);
+    if (bMaxLUN == 0) {
+        TRACE_USBHOST_SERIAL3(Serial.println("ERROR:MS::maxLun reported 0\r\n");)
+    }
     return 0;
 
 FailGetDevDescr:
-    TRACE_USBHOST(printf("MS::Init getDevDescr : ");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Init getDevDescr : ");)
     goto Fail;
 
 FailSetDevTblEntry:
-    TRACE_USBHOST(printf("MS::Init setDevTblEn : ");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Init setDevTblEn : ");)
     goto Fail;
 
 FailGetConfDescr:
-    TRACE_USBHOST(printf("MS::Init getConf : ");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Init getConf : ");)
     goto Fail;
 
 FailSetConfDescr:
-    TRACE_USBHOST(printf("MS::Init setConf : ");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Init setConf : ");)
     goto Fail;
 
 Fail:
-    TRACE_USBHOST(printf("error code: %lu\r\n", rcode);)
+    TRACE_USBHOST_SERIAL3(Serial.println("error code");)
+    TRACE_USBHOST_SERIAL3(Serial.println(rcode);)
     Release();
     return rcode;
 }
@@ -247,20 +255,15 @@ Fail:
 void MassStorage::EndpointXtract(uint32_t conf, uint32_t iface, uint32_t alt,
                                  uint32_t proto, const USB_ENDPOINT_DESCRIPTOR *pep)
 {
-    if (bNumEP == MS_MAX_ENDPOINTS)
+    if (bNumEP == MS_MAX_ENDPOINTS) {
+        TRACE_USBHOST_SERIAL3(Serial.println("Completed extraction of endpoints. Total ep:");)
         return;
+    }
 
     bConfNum = conf;
     bIfaceNum = iface;
     uint32_t index = 0;
     uint32_t pipe = 0;
-    // if its the first call get get maxlun
-    if (1 == bNumEP) {
-        GetMaxLUN(&bMaxLUN);
-        if (bMaxLUN == 0) {
-            TRACE_USBHOST(printf("ERROR:MS::maxLun reported 0\r\n");)
-        }
-    }
 
     // ctrl EP address is allocated in ctrlReq so no need to allocate here
     //
@@ -270,15 +273,11 @@ void MassStorage::EndpointXtract(uint32_t conf, uint32_t iface, uint32_t alt,
     else if (((pep->bmAttributes & 0x03) == USB_TRANSFER_TYPE_CONTROL) && \
             (pep->bEndpointAddress & 0x80) == USB_SETUP_HOST_TO_DEVICE) {
         // code shouldnt reach here!!!
-        TRACE_USBHOST(printf("ERROR:MS::EndpointXtract : Unknwon endpoint\r\n");)
-        TRACE_USBHOST(printf("ERROR:MS::EndpointXtract : EpAddress: %lu\r\n",
-                      pep->bEndpointAddress);)
+        TRACE_USBHOST_SERIAL3(Serial.println("ERROR:MS::EndpointXtract : Unknwon endpoint\r\n");)
         return;
     }
     else {
-        TRACE_USBHOST(printf("ERROR:MS::EndpointXtract : Unknwon endpoint\r\n");)
-        TRACE_USBHOST(printf("ERROR:MS::EndpointXtract : EpAddress: %lu\r\n",
-                      pep->bEndpointAddress);)
+        TRACE_USBHOST_SERIAL3(Serial.println("ERROR:MS::EndpointXtract : Unknwon endpoint\r\n");)
         return;
     }
 
@@ -287,10 +286,13 @@ void MassStorage::EndpointXtract(uint32_t conf, uint32_t iface, uint32_t alt,
     epInfo[index].maxPktSize = pep->wMaxPacketSize;
 
 
-    TRACE_USBHOST(printf("MS::EndpointXtract : Found new endpoint\r\n");)
-    TRACE_USBHOST(printf("MS::EndpointXtract : deviceEpNum: %lu\r\n", epInfo[index].deviceEpNum);)
-    TRACE_USBHOST(printf("MS::EndpointXtract : maxPktSize: %lu\r\n", epInfo[index].maxPktSize);)
-    TRACE_USBHOST(printf("MS::EndpointXtract : index: %lu\r\n", index);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::EndpointXtract : Found new endpoint\r\n");)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::EndpointXtract : deviceEpNum\r\n");)
+    TRACE_USBHOST_SERIAL3(Serial.println(epInfo[index].deviceEpNum);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::EndpointXtract : maxPktSize:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(epInfo[index].maxPktSize);)
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::EndpointXtract : index:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(index);)
 
     // single bank pipe UOTGHS_HSTPIPCFG_PBK_1_BANK
     // This indicates that the pipe should have one single bank, which
@@ -309,7 +311,7 @@ void MassStorage::EndpointXtract(uint32_t conf, uint32_t iface, uint32_t alt,
     // Ensure pipe allocation is okay
     if (0 == pipe)
     {
-        TRACE_USBHOST(printf("MS::EndpointXtract : Pipe allocation failure\r\n");)
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::EndpointXtract : Pipe allocation failure\r\n");)
         // Enumeration failed, so user should not perform write/read since isConnected will return false
         return;
     }
@@ -353,13 +355,13 @@ void MassStorage::Reset(void) {
     if(!bAddress)
         return;
     uint8_t tries = 5;
-    while(pUsb->ctrlReq(bAddress, CTRL_EP, bmREQ_MS_OUT,
+    while(pUsb->ctrlReq(bAddress, 0, bmREQ_MS_OUT,
           REQ_MassStorageReset, 0, 0, bIfaceNum, 0, 0, nullptr,
           nullptr) != 0x0) {
             delay(100);
             tries--;
             if (tries == 0) {
-                TRACE_USBHOST(printf("\r\nCouldnt reset the drive\r\n"));
+                TRACE_USBHOST_SERIAL3(Serial.println("\r\nCouldnt reset the drive\r\n"));
                 break;
             }
     }
@@ -374,12 +376,17 @@ void MassStorage::Reset(void) {
 uint8_t MassStorage::GetMaxLUN(uint8_t *plun) {
     if(!bAddress)
         return BULK_ERR_DEVICE_DISCONNECTED;
+    TRACE_USBHOST_SERIAL3(Serial.println("Called GetMaxLUN. bIfaceNum"));
+    TRACE_USBHOST_SERIAL3(Serial.println(bIfaceNum));
+    pUsb->setConf(bAddress, 0, bConfNum);
     uint32_t rcode = pUsb->ctrlReq(bAddress, 0, bmREQ_MS_IN, REQ_GetMaxLUN,
                                    0x0, 0, bIfaceNum, 1, 1, plun, nullptr);
     if(rcode == HOST_ERROR_STALL) {
         *plun = 0;
-        TRACE_USBHOST(printf("\r\nGetMaxLUN Stalled\r\n"));
+        TRACE_USBHOST_SERIAL3(Serial.println("\r\nGetMaxLUN Stalled\r\n"));
     }
+    TRACE_USBHOST_SERIAL3(Serial.println("Finished GetMaxLUN. lun:"));
+    TRACE_USBHOST_SERIAL3(Serial.println(*plun));
     return 0;
 }
 
@@ -389,6 +396,27 @@ uint8_t wait(uint8_t tries, uint32_t delay_time) {
         return 1;
     delay(delay_time);
     return 0;
+}
+
+void printCSW(MS_CommandStatusWrapper_t *pcsw) {
+    TRACE_USBHOST_SERIAL3(Serial.println("signature:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcsw->signature);)
+    TRACE_USBHOST_SERIAL3(Serial.println("tag:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcsw->tag);)
+    TRACE_USBHOST_SERIAL3(Serial.println("dataTransferResidue:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcsw->dataTransferResidue);)
+    TRACE_USBHOST_SERIAL3(Serial.println("status:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcsw->status);)
+    TRACE_USBHOST_SERIAL3(Serial.println("Done printing CSW");)
+}
+
+void printCBW(MS_CommandBlockWrapper_t *pcbw) {
+    TRACE_USBHOST_SERIAL3(Serial.println("signature:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcbw->signature);)
+    TRACE_USBHOST_SERIAL3(Serial.println("tag:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcbw->tag);)
+    TRACE_USBHOST_SERIAL3(Serial.println("dataTransferLength:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcbw->dataTransferLength);)
 }
 /**
  * For driver use only.
@@ -401,13 +429,17 @@ bool MassStorage::IsValidCSW(MS_CommandStatusWrapper_t *pcsw,
                              MS_CommandBlockWrapper_t *pcbw) {
     if(!bAddress)
         return false;
+    printCSW(pcsw);
+    TRACE_USBHOST_SERIAL3(Serial.println(pcsw->tag);)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcbw->tag);)
     if(pcsw->signature != MS_CSW_SIGNATURE) {
-        TRACE_USBHOST(printf("MS::csw signature error: %d\r\n"));
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::csw signature error:");)
+        TRACE_USBHOST_SERIAL3(Serial.println(pcsw->tag);)
         return false;
     }
     if(pcsw->tag != pcbw->tag) {
-        TRACE_USBHOST(printf("MS::csw wrong tag csw:%u cbw:%u: %d\r\n",
-                      pcsw->tag, pcbw->tag));
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::csw wrong tag csw: cbw:");)
+        TRACE_USBHOST_SERIAL3(Serial.println(pcbw->tag);)
         return false;
     }
     return true;
@@ -436,36 +468,43 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
     MS_CommandStatusWrapper_t csw;
     // set current lun, might be racy
     bTheLUN = pcbw->lun;
-    TRACE_USBHOST(printf("MS::Transaction:dcbwTag: %d\r\n", pcbw->tag));
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:dcbwTag:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcbw->tag));
 
     while ((usberr = pUsb->outTransfer(bAddress,
                     epInfo[bEpDataOutIndex].deviceEpNum,
                     sizeof(MS_CommandBlockWrapper_t),
                     (uint8_t*)pcbw)) == USB_ERROR_HOST_BUSY) {
         if (wait(tries--, 100)) {
-            TRACE_USBHOST(printf("\r\nMS:host is busy couldnt send scsi cmd:%d\r\n", usberr));
+            TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi cmd");)
+            TRACE_USBHOST_SERIAL3(Serial.println(usberr);)
             break;
         }
     }
     tries = num_tries;
 
-    if(usberr)
-        TRACE_USBHOST(printf("MS::Transaction::ERROR CBW:%d\r\n", usberr));
+    if(usberr) {
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction::Host busy error on CBW");)
+        TRACE_USBHOST_SERIAL3(Serial.println(usberr);)
+        return usberr;
+    }
     else {
         if(bytes) {
             if(!write) {
+                TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Executing IN command");)
                 while((usberr = pUsb->inTransfer(bAddress, epInfo[bEpDataInIndex].deviceEpNum,
                             (uint32_t *)&bytes, (uint8_t*)buf)) == USB_ERROR_HOST_BUSY) {
                     if (wait(tries--, 100)) {
-                        TRACE_USBHOST(printf("\r\nMS:host is busy couldnt send scsi read cmd:%d\r\n", usberr));
+                        TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi read cmd"););
                         break;
                     }
                 }
             } else {
+                TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Executing OUT command");)
                 while((usberr = pUsb->outTransfer(bAddress, epInfo[bEpDataOutIndex].deviceEpNum, bytes,
                                 (uint8_t*)buf)) == USB_ERROR_HOST_BUSY) {
                     if (wait(tries--, 100)) {
-                        TRACE_USBHOST(printf("\r\nMS:host is busy couldnt send scsi write cmd:%d\r\n", usberr));
+                        TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi write cmd:"););
                         break;
                     }
                 }
@@ -473,18 +512,28 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
         }
     }
     tries = num_tries;
-    bytes = sizeof(MS_CommandStatusWrapper_t);
+    //uint32_t read = epInfo[bEpDataInIndex].maxPktSize;
+    uint32_t read = sizeof(csw);
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Reading CSW");)
+    TRACE_USBHOST_SERIAL3(Serial.println(bEpDataInIndex);)
     while((usberr = pUsb->inTransfer(bAddress, epInfo[bEpDataInIndex].deviceEpNum,
-                    (uint32_t *)&bytes, (uint8_t*)&csw)) == USB_ERROR_HOST_BUSY) {
+                    (uint32_t *)&read, (uint8_t*)&csw)) == USB_ERROR_HOST_BUSY) {
         if (wait(tries--, 100)) {
-            TRACE_USBHOST(printf("\r\nMS:host is busy couldnt send scsi write cmd:%d\r\n", usberr));
+            TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi write cmd:"););
             break;
         }
     }
-    if(usberr)
-        TRACE_USBHOST(printf("MS::Transaction::ERROR CSW:%d\r\n", usberr));
+    if(usberr) {
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction::Host busy error on CSW");)
+        TRACE_USBHOST_SERIAL3(Serial.println(usberr);)
+        return usberr;
+    }
     if(IsValidCSW(&csw, pcbw)) {
-        TRACE_USBHOST(printf("MS::Transaction:Correct CSW\r\n"));
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Correct CSW"););
+        if (csw.status != SCSI_Command_Pass) {
+            TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction::Status was not successful"););
+            TRACE_USBHOST_SERIAL3(Serial.println(csw.status);)
+        }
         return csw.status;
     } else {
         Reset();
@@ -533,7 +582,7 @@ void MassStorage::fill_scsi_cdb6(SCSI_CDB6_t *cdb,  uint8_t opcode,
 uint8_t MassStorage::TestUnitReady(uint8_t lun) {
         if(!bAddress)
             return BULK_ERR_UNIT_NOT_READY;
-        TRACE_USBHOST(printf("MS::TestUnitReady Address Assigned \r\n");)
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::TestUnitReady Address Assigned \r\n"););
 
 
         SCSI_CDB6_t cdb;
@@ -562,6 +611,7 @@ uint8_t MassStorage::SCSITransaction6(SCSI_CDB6_t *cdb, uint16_t buf_size,
 
         uint8_t v = Transaction(&cbw, buf_size, buf);
         enablePoll();
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::finished scsi transaction 6"););
         return v;
 }
 

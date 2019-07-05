@@ -22,6 +22,7 @@ e-mail   :  support@circuitsathome.com
 
 //#define TRACE_USBHOST(x) x
 #define TRACE_USBHOST(x)
+#define TRACE_USBHOST_SERIAL3(x) x
 
 #include <stdint.h>
 #include "usb_ch9.h"
