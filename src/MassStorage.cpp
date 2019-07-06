@@ -512,17 +512,27 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
         }
     }
     tries = num_tries;
-    //uint32_t read = epInfo[bEpDataInIndex].maxPktSize;
     uint32_t read = sizeof(csw);
     TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Reading CSW");)
     TRACE_USBHOST_SERIAL3(Serial.println(bEpDataInIndex);)
-    while((usberr = pUsb->inTransfer(bAddress, epInfo[bEpDataInIndex].deviceEpNum,
-                    (uint32_t *)&read, (uint8_t*)&csw)) == USB_ERROR_HOST_BUSY) {
-        if (wait(tries--, 100)) {
-            TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi write cmd:"););
-            break;
+    do {
+        while((usberr = pUsb->inTransfer(bAddress, epInfo[bEpDataInIndex].deviceEpNum,
+                        (uint32_t *)&read, (uint8_t*)&csw)) == USB_ERROR_HOST_BUSY) {
+            if (wait(tries--, 100)) {
+                TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi write cmd:"););
+                break;
+            }
         }
-    }
+        if (usberr == 1) {
+            TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Error is 1");)
+            if (Is_uhd_pipe_frozen(epInfo[bEpDataInIndex].hostPipeNum)) {
+                TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: unfreezing the pipe");)
+                uhd_unfreeze_pipe(epInfo[bEpDataInIndex].hostPipeNum);
+            }
+            delay(100);
+        } else
+            break;
+    } while (1);
     if(usberr) {
         TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction::Host busy error on CSW");)
         TRACE_USBHOST_SERIAL3(Serial.println(usberr);)
