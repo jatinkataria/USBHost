@@ -371,10 +371,16 @@ uint32_t USBHost::InTransfer(EpInfo *pep, uint32_t nak_limit, uint32_t *nbytespt
  *
  * \return 0 on success, error code otherwise.
  */
-uint32_t USBHost::outTransfer(uint32_t addr, uint32_t ep, uint32_t nbytes, uint8_t* data)
+
+uint32_t USBHost::outTransfer(uint32_t addr, uint32_t ep, uint32_t nbytes,
+        uint8_t* data) {
+    return outTransfer(addr, ep, nbytes, data, 0);
+}
+
+uint32_t USBHost::outTransfer(uint32_t addr, uint32_t ep, uint32_t nbytes,
+                              uint8_t* data, uint32_t nak_limit)
 {
 	EpInfo *pep = NULL;
-	uint32_t nak_limit = 0;
 
 	uint32_t rcode = setPipeAddress(addr, ep, &pep, nak_limit);
 

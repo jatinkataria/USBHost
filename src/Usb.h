@@ -217,6 +217,8 @@ class USBHost
         /* Transfer requests */
         uint32_t inTransfer(uint32_t addr, uint32_t ep, uint32_t *nbytesptr, uint8_t* data);
   uint32_t outTransfer(uint32_t addr, uint32_t ep, uint32_t nbytes, uint8_t* data);
+  uint32_t outTransfer(uint32_t addr, uint32_t ep, uint32_t nbytes,
+                       uint8_t* data, uint32_t nak_limit);
         uint32_t dispatchPkt(uint32_t token, uint32_t ep, uint32_t nak_limit);
 
         void Task(void);
