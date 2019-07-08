@@ -18,6 +18,48 @@
 
 #include <MassStorage.h>
 
+uint8_t wait(uint8_t tries, uint32_t delay_time) {
+    if (0 == tries)
+        return 1;
+    delay(delay_time);
+    return 0;
+}
+
+uint32_t MassStorage::bulkInTransfer(EpInfo *pep, uint32_t nak_limit,
+        uint32_t *nbytesptr, uint8_t* data) {
+    uint32_t usberr, tries = nak_limit, delay_wait = 100;
+    if (nullptr == nbytesptr || nullptr == data)
+        return MASS_STORAGE_NULL_PARAM;
+    TRACE_USBHOST_SERIAL3(Serial.println("bulkIntransfer: perform it"););
+
+    do {
+        while((usberr = pUsb->inTransfer(bAddress, pep->deviceEpNum,
+                        nbytesptr, data) == USB_ERROR_HOST_BUSY)) {
+            if (wait(tries--, delay_wait)) {
+                TRACE_USBHOST_SERIAL3(Serial.println("bulkIntransfer:host is busy couldnt send scsi write cmd:"););
+                return usberr;
+            }
+        }
+
+        if (BULK_ERR_NAK == usberr) {
+            TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Error is 1");)
+            if (Is_uhd_pipe_frozen(pep->hostPipeNum)) {
+                TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: unfreezing the pipe");)
+                uhd_unfreeze_pipe(pep->hostPipeNum);
+            }
+            if (--nak_limit == 0)
+                return BULK_ERR_NAK;
+            delay(100);
+        } else
+            return usberr;
+    } while (1);
+    TRACE_USBHOST_SERIAL3(Serial.println("Intransfer:Number of bytes read");)
+    TRACE_USBHOST_SERIAL3(Serial.println(*nbytesptr);)
+    return BULK_SUCCESS;
+}
+
+
+
 void MassStorage::create_cbw_packet_cdb6(MS_CommandBlockWrapper_t *cbw,
         uint32_t tag, uint32_t transfer_len, SCSI_CDB6_t *cdb,
         uint8_t direction) {
@@ -354,7 +396,7 @@ uint32_t MassStorage::Release()
 void MassStorage::Reset(void) {
     if(!bAddress)
         return;
-    uint8_t tries = 5;
+    uint8_t tries = NAK_LIMIT;
     while(pUsb->ctrlReq(bAddress, 0, bmREQ_MS_OUT,
           REQ_MassStorageReset, 0, 0, bIfaceNum, 0, 0, nullptr,
           nullptr) != 0x0) {
@@ -390,13 +432,6 @@ uint8_t MassStorage::GetMaxLUN(uint8_t *plun) {
     return 0;
 }
 
-
-uint8_t wait(uint8_t tries, uint32_t delay_time) {
-    if (0 == tries)
-        return 1;
-    delay(delay_time);
-    return 0;
-}
 
 void printCSW(MS_CommandStatusWrapper_t *pcsw) {
     TRACE_USBHOST_SERIAL3(Serial.println("signature:");)
@@ -459,12 +494,11 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
                                  uint16_t buf_size, void *buf) {
     if(!bAddress)
         return BULK_ERR_DEVICE_DISCONNECTED;
-
     uint16_t bytes = buf_size;
     bool write = (pcbw->flags & USB_SETUP_DEVICE_TO_HOST) != USB_SETUP_DEVICE_TO_HOST;
-    uint32_t usberr;
-    uint8_t num_tries = 5;
-    uint8_t tries = num_tries;
+    uint32_t usberr, read_bytes;
+    uint32_t num_tries = NAK_LIMIT;
+    uint32_t tries = num_tries;
     MS_CommandStatusWrapper_t csw;
     // set current lun, might be racy
     bTheLUN = pcbw->lun;
@@ -492,13 +526,8 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
         if(bytes) {
             if(!write) {
                 TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Executing IN command");)
-                while((usberr = pUsb->inTransfer(bAddress, epInfo[bEpDataInIndex].deviceEpNum,
-                            (uint32_t *)&bytes, (uint8_t*)buf)) == USB_ERROR_HOST_BUSY) {
-                    if (wait(tries--, 100)) {
-                        TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi read cmd"););
-                        break;
-                    }
-                }
+                usberr = bulkInTransfer(&epInfo[bEpDataInIndex], NAK_LIMIT, &read_bytes,
+                                        (uint8_t *)buf);
             } else {
                 TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Executing OUT command");)
                 while((usberr = pUsb->outTransfer(bAddress, epInfo[bEpDataOutIndex].deviceEpNum, bytes,
@@ -511,33 +540,14 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
             }
         }
     }
-    tries = num_tries;
+    if (usberr)
+        return usberr;
     uint32_t read = sizeof(csw);
     TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Reading CSW");)
     TRACE_USBHOST_SERIAL3(Serial.println(bEpDataInIndex);)
-    do {
-        while((usberr = pUsb->inTransfer(bAddress, epInfo[bEpDataInIndex].deviceEpNum,
-                        (uint32_t *)&read, (uint8_t*)&csw)) == USB_ERROR_HOST_BUSY) {
-            if (wait(tries--, 100)) {
-                TRACE_USBHOST_SERIAL3(Serial.println("\r\nMS:host is busy couldnt send scsi write cmd:"););
-                break;
-            }
-        }
-        if (usberr == 1) {
-            TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Error is 1");)
-            if (Is_uhd_pipe_frozen(epInfo[bEpDataInIndex].hostPipeNum)) {
-                TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: unfreezing the pipe");)
-                uhd_unfreeze_pipe(epInfo[bEpDataInIndex].hostPipeNum);
-            }
-            delay(100);
-        } else
-            break;
-    } while (1);
-    if(usberr) {
-        TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction::Host busy error on CSW");)
-        TRACE_USBHOST_SERIAL3(Serial.println(usberr);)
+    usberr = bulkInTransfer(&epInfo[bEpDataInIndex], NAK_LIMIT, &read, (uint8_t *)&csw);
+    if(usberr)
         return usberr;
-    }
     if(IsValidCSW(&csw, pcbw)) {
         TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Correct CSW"););
         if (csw.status != SCSI_Command_Pass) {

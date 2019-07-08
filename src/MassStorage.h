@@ -30,13 +30,16 @@
 // Requests type
 #define bmREQ_MS_IN     USB_SETUP_DEVICE_TO_HOST|USB_SETUP_TYPE_CLASS|USB_SETUP_RECIPIENT_INTERFACE
 #define bmREQ_MS_OUT     USB_SETUP_HOST_TO_DEVICE|USB_SETUP_TYPE_CLASS|USB_SETUP_RECIPIENT_INTERFACE
+#define NAK_LIMIT 30
+#define MASS_STORAGE_NULL_PARAM 0xFFFFFFFA
 
 
 /* Bulk error codes */
 #define HOST_ERROR_NONE 0x0U
 #define HOST_ERROR_UNPLUGGED 0xDEU
 #define HOST_ERROR_STALL 0x5U
-#define              BULK_ERR_SUCCESS HOST_ERROR_NONE
+#define              BULK_SUCCESS HOST_ERROR_NONE
+#define          BULK_ERR_NAK 0x1
 #define          BULK_ERR_PHASE_ERROR 0x22U
 #define       BULK_ERR_UNIT_NOT_READY 0x23U
 #define            BULK_ERR_UNIT_BUSY 0x24U
@@ -282,8 +285,8 @@ public:
     //uint8_t Write(uint8_t lun, uint32_t addr, uint16_t bsize, uint8_t blocks, const uint8_t *buf);
     //uint32_t GetCapacity(uint8_t lun);
     uint8_t SCSITransaction6(SCSI_CDB6_t *cdb, uint16_t buf_size, void *buf, uint8_t dir);
-
-
+    /* Transfer requests Wrapper for BBB */
+    uint32_t bulkInTransfer(EpInfo *pep, uint32_t nak_limit, uint32_t *nbytesptr, uint8_t* data);
 };
 
 #endif
