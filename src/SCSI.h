@@ -35,8 +35,8 @@
 /** SCSI Command Code for a REQUEST SENSE command. */
 #define SCSI_CMD_REQUEST_SENSE                         0x03
 
-/** SCSI Command Code for a TEST UNIT READY command. */
 #define SCSI_CMD_TEST_UNIT_READY                       0x00
+
 
 /** SCSI Command Code for a READ CAPACITY (10) command. */
 #define SCSI_CMD_READ_CAPACITY_10                      0x25
@@ -149,6 +149,11 @@
 
 /** SCSI Additional Sense Qualifier Code to indicate that an operation is currently in progress. */
 #define SCSI_ASENSEQ_OPERATION_IN_PROGRESS             0x07
+
+
+/** SCSI Command Code for CAN passthrough  */
+#define SCSI_CMD_CAN_PASSTHROUGH                      0xE0
+
 
 /** Mass Storage Class SCSI Sense Structure
  *  Type define for a SCSI Sense structure. Structures of this type are filled out by the

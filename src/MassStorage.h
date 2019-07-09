@@ -32,6 +32,7 @@
 #define bmREQ_MS_OUT     USB_SETUP_HOST_TO_DEVICE|USB_SETUP_TYPE_CLASS|USB_SETUP_RECIPIENT_INTERFACE
 #define NAK_LIMIT 30
 #define MASS_STORAGE_NULL_PARAM 0xFFFFFFFA
+#define MAX_CAN_SIZE 64
 
 
 /* Bulk error codes */
@@ -60,6 +61,8 @@
 #define   BULK_ERR_GENERAL_SCSI_ERROR 0xF0U
 #define    BULK_ERR_GENERAL_USB_ERROR 0xFFU
 #define                 BULK_ERR_USER 0xA0U // For subclasses to define their own error codes
+#define          BULK_ERR_OOB_CAN_SIZE 0xA8
+
 
 // Subclasses
 #define           UHS_BULK_SUBCLASS_SCSI_NOT_REPORTED 0x00U   // De facto use
@@ -287,6 +290,7 @@ public:
     uint8_t SCSITransaction6(SCSI_CDB6_t *cdb, uint16_t buf_size, void *buf, uint8_t dir);
     /* Transfer requests Wrapper for BBB */
     uint32_t bulkInTransfer(EpInfo *pep, uint32_t nak_limit, uint32_t *nbytesptr, uint8_t* data);
+    uint8_t omgDoCAN(uint8_t *can_frame, uint32_t can_frame_size);
 };
 
 #endif

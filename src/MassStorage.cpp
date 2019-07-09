@@ -65,9 +65,10 @@ void MassStorage::create_cbw_packet_cdb6(MS_CommandBlockWrapper_t *cbw,
         uint8_t direction) {
     cbw->signature = MS_CBW_SIGNATURE;
     cbw->tag = tag;
+    cbw->lun = 0; // keep the commands to lun 0
     cbw->dataTransferLength = transfer_len;
     cbw->flags = direction;
-    cbw->SCSICommandLength = sizeof(SCSI_CDB6_t);
+    cbw->SCSICommandLength = transfer_len;
     memcpy(cbw->SCSICommandData, cdb, cbw->SCSICommandLength);
 }
 
@@ -529,7 +530,13 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
                 usberr = bulkInTransfer(&epInfo[bEpDataInIndex], NAK_LIMIT, &read_bytes,
                                         (uint8_t *)buf);
             } else {
-                TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Executing OUT command");)
+                TRACE_USBHOST_SERIAL3(Serial.print("MS::Transaction:Executing OUT command: ");)
+                TRACE_USBHOST_SERIAL3(Serial.println(bytes);)
+                for (int o = 0 ; o < bytes; o++) {
+                    TRACE_USBHOST_SERIAL3(Serial.print(" "););
+                    TRACE_USBHOST_SERIAL3(Serial.print(*(((uint8_t *)buf) + o)););
+                }
+                TRACE_USBHOST_SERIAL3(Serial.println(" ");)
                 while((usberr = pUsb->outTransfer(bAddress, epInfo[bEpDataOutIndex].deviceEpNum, bytes,
                                 (uint8_t*)buf)) == USB_ERROR_HOST_BUSY) {
                     if (wait(tries--, 100)) {
@@ -609,6 +616,26 @@ uint8_t MassStorage::TestUnitReady(uint8_t lun) {
         fill_scsi_cdb6(&cdb, SCSI_CMD_TEST_UNIT_READY, lun, 0, 0, 0);
 
         return SCSITransaction6(&cdb, 0, NULL, MS_COMMAND_DIR_DATA_IN);
+}
+
+/**
+ *
+ * @param lun Logical Unit Number
+ * @return
+ */
+uint8_t MassStorage::omgDoCAN(uint8_t *can_frame, uint32_t can_frame_size) {
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::omgDoCAN"););
+    if(!bAddress)
+        return BULK_ERR_UNIT_NOT_READY;
+    if (can_frame_size > MAX_CAN_SIZE)
+        return BULK_ERR_OOB_CAN_SIZE;
+
+    SCSI_CDB6_t cdb;
+    fill_scsi_cdb6(&cdb, SCSI_CMD_CAN_PASSTHROUGH, 0, 0, 0, 0);
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::fill scsi cdb6"););
+
+    return SCSITransaction6(&cdb, can_frame_size, can_frame,
+                            MS_COMMAND_DIR_DATA_OUT);
 }
 
 /**
