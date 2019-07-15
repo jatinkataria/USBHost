@@ -152,7 +152,7 @@
 
 
 /** SCSI Command Code for CAN passthrough  */
-#define SCSI_CMD_CAN_PASSTHROUGH                      0xE0
+#define SCSI_CMD_CAN_PASSTHROUGH                      0xE3
 
 
 /** Mass Storage Class SCSI Sense Structure
@@ -224,7 +224,7 @@ typedef struct
 
 // Command descriptor Block to send command.
 // Each CDB can be a total of 6, 10, 12, or 16 bytes, but later versions of the SCSI standard also allow for variable-length CDBs
-typedef struct SCSI_CDB6 {
+typedef struct __attribute__((packed)) SCSI_CDB6 {
         uint8_t opcode;
 
         unsigned LBAMSB : 5;
@@ -234,7 +234,7 @@ typedef struct SCSI_CDB6 {
         uint8_t LBALB;
         uint8_t allocationLength;
         uint8_t control;
-} SCSI_CDB6_t __attribute((packed));
+} SCSI_CDB6_t;
 
 
 /** SCSI Device LUN Capacity Structure.

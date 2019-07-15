@@ -68,7 +68,7 @@ void MassStorage::create_cbw_packet_cdb6(MS_CommandBlockWrapper_t *cbw,
     cbw->lun = 0; // keep the commands to lun 0
     cbw->dataTransferLength = transfer_len;
     cbw->flags = direction;
-    cbw->SCSICommandLength = transfer_len;
+    cbw->SCSICommandLength = 6;
     memcpy(cbw->SCSICommandData, cdb, cbw->SCSICommandLength);
 }
 
@@ -454,6 +454,16 @@ void printCBW(MS_CommandBlockWrapper_t *pcbw) {
     TRACE_USBHOST_SERIAL3(Serial.println("dataTransferLength:");)
     TRACE_USBHOST_SERIAL3(Serial.println(pcbw->dataTransferLength);)
 }
+void printCDB(SCSI_CDB6_t *pcdb) {
+    TRACE_USBHOST_SERIAL3(Serial.println("opcode:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcdb->opcode);)
+    TRACE_USBHOST_SERIAL3(Serial.println("lun:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcdb->LUN);)
+    TRACE_USBHOST_SERIAL3(Serial.println("allocationLength:");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcdb->allocationLength);)
+    TRACE_USBHOST_SERIAL3(Serial.println("control");)
+    TRACE_USBHOST_SERIAL3(Serial.println(pcdb->control);)
+}
 /**
  * For driver use only.
  *
@@ -506,6 +516,8 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
     TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:dcbwTag:");)
     TRACE_USBHOST_SERIAL3(Serial.println(pcbw->tag));
 
+    TRACE_USBHOST_SERIAL3(Serial.println("Sending CBW:");)
+    printCBW(pcbw);
     while ((usberr = pUsb->outTransfer(bAddress,
                     epInfo[bEpDataOutIndex].deviceEpNum,
                     sizeof(MS_CommandBlockWrapper_t),
@@ -529,6 +541,11 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
                 TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:Executing IN command");)
                 usberr = bulkInTransfer(&epInfo[bEpDataInIndex], NAK_LIMIT, &read_bytes,
                                         (uint8_t *)buf);
+                TRACE_USBHOST_SERIAL3(Serial.println(read_bytes);)
+                for (int o = 0 ; o < read_bytes; o++) {
+                    TRACE_USBHOST_SERIAL3(Serial.print(" "););
+                    TRACE_USBHOST_SERIAL3(Serial.print(*(((uint8_t *)buf) + o)););
+                }
             } else {
                 TRACE_USBHOST_SERIAL3(Serial.print("MS::Transaction:Executing OUT command: ");)
                 TRACE_USBHOST_SERIAL3(Serial.println(bytes);)
@@ -553,6 +570,9 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
     TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: Reading CSW");)
     TRACE_USBHOST_SERIAL3(Serial.println(bEpDataInIndex);)
     usberr = bulkInTransfer(&epInfo[bEpDataInIndex], NAK_LIMIT, &read, (uint8_t *)&csw);
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::Transaction:: CSW usberr");)
+    TRACE_USBHOST_SERIAL3(Serial.println(usberr);)
+    printCSW(&csw);
     if(usberr)
         return usberr;
     if(IsValidCSW(&csw, pcbw)) {
@@ -563,7 +583,7 @@ uint8_t MassStorage::Transaction(MS_CommandBlockWrapper_t *pcbw,
         }
         return csw.status;
     } else {
-        Reset();
+        //Reset();
         return BULK_ERR_INVALID_CSW;
     }
     return 0;
@@ -613,9 +633,14 @@ uint8_t MassStorage::TestUnitReady(uint8_t lun) {
 
 
         SCSI_CDB6_t cdb;
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::size of cdb cbw csw"););
+        TRACE_USBHOST_SERIAL3(Serial.println(sizeof(cdb)););
+        TRACE_USBHOST_SERIAL3(Serial.println(sizeof(MS_CommandBlockWrapper_t)););
+        TRACE_USBHOST_SERIAL3(Serial.println(sizeof(MS_CommandStatusWrapper_t)););
         fill_scsi_cdb6(&cdb, SCSI_CMD_TEST_UNIT_READY, lun, 0, 0, 0);
 
-        return SCSITransaction6(&cdb, 0, NULL, MS_COMMAND_DIR_DATA_IN);
+        // SEAGATE expects 6 bytes from device for this command
+        return SCSITransaction6(&cdb, 0, NULL, MS_COMMAND_DIR_DATA_OUT);
 }
 
 /**
@@ -655,6 +680,7 @@ uint8_t MassStorage::SCSITransaction6(SCSI_CDB6_t *cdb, uint16_t buf_size,
         // promote buf_size to 32bits.
         MS_CommandBlockWrapper_t cbw;
         create_cbw_packet_cdb6(&cbw, ++cbwTag, (uint32_t)buf_size, cdb, dir);
+        printCDB(cdb);
 
         uint8_t v = Transaction(&cbw, buf_size, buf);
         enablePoll();

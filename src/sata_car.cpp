@@ -109,13 +109,14 @@ void pass_can_through_scsi(CAN_FRAME &frame) {
     }
    Serial.println("can passthrough successful");
 }
+int send = 0;
 
 // the loop function runs over and over again forever
 void loop() {
     Serial.println("looping\n");
     if (!setup_success) {
         blink_led(1, 1000);
-        return;
+        //return;
     }
     //blink_led(4, 20);
     CAN_FRAME incoming;
@@ -135,6 +136,11 @@ void loop() {
         }
         printFrame(incoming);
     }
+    else {
+        incoming.length = 2;
+        incoming.data.bytes[0] = 0x10;
+        incoming.data.bytes[1] = 0x10;
+    }
 
     // Pass Through as USBMS command
     usb.Task();
@@ -144,8 +150,8 @@ void loop() {
     //    status = ms.TestUnitReady(lun);
     //    digitalWrite(LED_BUILTIN, LOW);
     //}
-    if (max_lun == 0 || ms.TestUnitReady(0))
+    if (ms.TestUnitReady(0))
         return;
-    pass_can_through_scsi(incoming);
-    delay(1000);
+        //pass_can_through_scsi(incoming);
+    delay(10000);
 }

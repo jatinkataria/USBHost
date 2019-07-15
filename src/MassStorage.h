@@ -131,7 +131,7 @@
  * Direction: Host->Device
  *
  */
-typedef struct
+typedef struct __attribute__((packed))
 {
     // Must be MS_CBW_SIGNATURE to indicate valid CBW
     uint32_t signature;
@@ -149,7 +149,7 @@ typedef struct
     uint8_t SCSICommandData[16];
 } MS_CommandBlockWrapper_t;
 
-typedef struct
+typedef struct __attribute__((packed))
 {
     // Must be MS_CSW_SIGNATURE to indicate valid CSW
     uint32_t signature;
