@@ -152,6 +152,6 @@ void loop() {
     //}
     if (ms.TestUnitReady(0))
         return;
-        //pass_can_through_scsi(incoming);
-    delay(10000);
+    pass_can_through_scsi(incoming);
+    delay(1000);
 }

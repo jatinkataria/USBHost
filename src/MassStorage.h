@@ -248,6 +248,9 @@ private:
     void create_cbw_packet_cdb6(MS_CommandBlockWrapper_t *cbw, uint32_t tag,
                                 uint32_t transfer_len, SCSI_CDB6_t *cdb,
                                 uint8_t direction);
+    void create_cbw_packet_cdb12(MS_CommandBlockWrapper_t *cbw, uint32_t tag,
+                                uint32_t transfer_len, SCSI_CDB12_t *cdb,
+                                uint8_t direction);
     uint8_t GetMaxLUN(uint8_t *max_lun);
 
 
@@ -288,6 +291,7 @@ public:
     //uint8_t Write(uint8_t lun, uint32_t addr, uint16_t bsize, uint8_t blocks, const uint8_t *buf);
     //uint32_t GetCapacity(uint8_t lun);
     uint8_t SCSITransaction6(SCSI_CDB6_t *cdb, uint16_t buf_size, void *buf, uint8_t dir);
+    uint8_t SCSITransaction12(SCSI_CDB12_t *cdb, uint16_t buf_size, void *buf, uint8_t dir);
     /* Transfer requests Wrapper for BBB */
     uint32_t bulkInTransfer(EpInfo *pep, uint32_t nak_limit, uint32_t *nbytesptr, uint8_t* data);
     uint8_t omgDoCAN(uint8_t *can_frame, uint32_t can_frame_size);

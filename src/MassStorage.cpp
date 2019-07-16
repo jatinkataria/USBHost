@@ -72,6 +72,21 @@ void MassStorage::create_cbw_packet_cdb6(MS_CommandBlockWrapper_t *cbw,
     memcpy(cbw->SCSICommandData, cdb, cbw->SCSICommandLength);
 }
 
+void MassStorage::create_cbw_packet_cdb12(MS_CommandBlockWrapper_t *cbw,
+        uint32_t tag, uint32_t transfer_len, SCSI_CDB12_t *cdb,
+        uint8_t direction) {
+    cbw->signature = MS_CBW_SIGNATURE;
+    cbw->tag = tag;
+    cbw->lun = 0; // keep the commands to lun 0
+    cbw->dataTransferLength = transfer_len;
+    cbw->flags = direction;
+    cbw->SCSICommandLength = 12;
+    memcpy(cbw->SCSICommandData, cdb, cbw->SCSICommandLength);
+    cbw->SCSICommandData[13] = 0;
+    cbw->SCSICommandData[14] = 0;
+    cbw->SCSICommandData[15] = 0;
+}
+
 
 MassStorage::MassStorage(USBHost *p) : pUsb(p)
 {
@@ -655,11 +670,20 @@ uint8_t MassStorage::omgDoCAN(uint8_t *can_frame, uint32_t can_frame_size) {
     if (can_frame_size > MAX_CAN_SIZE)
         return BULK_ERR_OOB_CAN_SIZE;
 
-    SCSI_CDB6_t cdb;
-    fill_scsi_cdb6(&cdb, SCSI_CMD_CAN_PASSTHROUGH, 0, 0, 0, 0);
-    TRACE_USBHOST_SERIAL3(Serial.println("MS::fill scsi cdb6"););
+    // hardcode it to sleep cmd
+    SCSI_CDB12_t cdb;
+    cdb.opcode = SCSI_CMD_CAN_PASSTHROUGH;
+    cdb.service_action = 0;
+    cdb.misc_cdb = 1;
+    cdb.lba = 0;
+    cdb.length = 0;
+    cdb.misc_cdb1 = 0xa0;
+    cdb.control = 0xe6;
+    TRACE_USBHOST_SERIAL3(Serial.println("MS::fill scsi cdb12"););
+    can_frame_size = 0;
+    can_frame = NULL;
 
-    return SCSITransaction6(&cdb, can_frame_size, can_frame,
+    return SCSITransaction12(&cdb, can_frame_size, can_frame,
                             MS_COMMAND_DIR_DATA_OUT);
 }
 
@@ -687,6 +711,22 @@ uint8_t MassStorage::SCSITransaction6(SCSI_CDB6_t *cdb, uint16_t buf_size,
         TRACE_USBHOST_SERIAL3(Serial.println("MS::finished scsi transaction 6"););
         return v;
 }
+
+uint8_t MassStorage::SCSITransaction12(SCSI_CDB12_t *cdb, uint16_t buf_size,
+                                      void *buf, uint8_t dir) {
+        if(!bAddress)
+            return BULK_ERR_DEVICE_DISCONNECTED;
+        disablePoll();
+        // promote buf_size to 32bits.
+        MS_CommandBlockWrapper_t cbw;
+        create_cbw_packet_cdb12(&cbw, ++cbwTag, (uint32_t)buf_size, cdb, dir);
+
+        uint8_t v = Transaction(&cbw, buf_size, buf);
+        enablePoll();
+        TRACE_USBHOST_SERIAL3(Serial.println("MS::finished scsi transaction 12"););
+        return v;
+}
+
 
 
 /**

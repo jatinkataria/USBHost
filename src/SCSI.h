@@ -152,7 +152,7 @@
 
 
 /** SCSI Command Code for CAN passthrough  */
-#define SCSI_CMD_CAN_PASSTHROUGH                      0xE3
+#define SCSI_CMD_CAN_PASSTHROUGH                      0xdf
 
 
 /** Mass Storage Class SCSI Sense Structure
@@ -235,6 +235,17 @@ typedef struct __attribute__((packed)) SCSI_CDB6 {
         uint8_t allocationLength;
         uint8_t control;
 } SCSI_CDB6_t;
+
+typedef struct __attribute__((packed)) SCSI_CDB12 {
+        uint8_t opcode;
+        uint8_t service_action:4;
+        uint8_t misc_cdb:4;
+        uint32_t lba;
+        uint32_t length;
+        uint8_t misc_cdb1;
+        uint8_t control;
+} SCSI_CDB12_t;
+
 
 
 /** SCSI Device LUN Capacity Structure.
